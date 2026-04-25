@@ -39,10 +39,21 @@ const router = createRouter({
       meta: { requiresAuth: true },
     },
     {
+      path: '/users/:id',
+      name: 'UserProfile',
+      component: () => import('@/views/Profile.vue'),
+    },
+    {
       path: '/admin',
       name: 'Admin',
       component: () => import('@/views/Admin.vue'),
       meta: { requiresAuth: true, requiresAdmin: true },
+    },
+    {
+      path: '/messages',
+      name: 'Messages',
+      component: () => import('@/views/Messages.vue'),
+      meta: { requiresAuth: true },
     },
   ],
 });

@@ -43,6 +43,12 @@ const createIndexes = async () => {
     .createIndex({ userId: 1, targetId: 1, targetType: 1 }, { unique: true });
   await db.collection("likes").createIndex({ targetId: 1, targetType: 1 });
 
+  await db.collection("messages").createIndex({ senderId: 1, receiverId: 1, createdAt: 1 });
+  await db.collection("messages").createIndex({ receiverId: 1, senderId: 1, createdAt: 1 });
+  await db.collection("messages").createIndex({ receiverId: 1, isRead: 1 });
+  await db.collection("messages").createIndex({ senderId: 1, createdAt: -1 });
+  await db.collection("messages").createIndex({ receiverId: 1, createdAt: -1 });
+
   console.log("Database indexes created successfully");
 };
 

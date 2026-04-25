@@ -8,6 +8,15 @@
           <template v-if="userStore.isLoggedIn">
             <router-link to="/new-post" class="nav-link">发帖</router-link>
             <router-link to="/profile" class="nav-link">个人中心</router-link>
+            <router-link to="/messages" class="nav-link messages-icon-wrapper">
+              <span class="messages-icon">✉️</span>
+              <span
+                v-if="chatStore.totalUnreadCount > 0"
+                class="unread-badge"
+              >
+                {{ chatStore.totalUnreadCount > 99 ? '99+' : chatStore.totalUnreadCount }}
+              </span>
+            </router-link>
             <router-link v-if="userStore.isAdmin" to="/admin" class="nav-link">管理</router-link>
             <span class="text-secondary text-sm">{{ userStore.user?.username }}</span>
             <button @click="handleLogout" class="btn btn-outline btn-sm">退出</button>
@@ -26,16 +35,37 @@
 </template>
 
 <script setup lang="ts">
+import { watch, onMounted } from 'vue';
 import { useUserStore } from '@/stores/user';
+import { useChatStore } from '@/stores/chat';
 import { useRouter } from 'vue-router';
 
 const userStore = useUserStore();
+const chatStore = useChatStore();
 const router = useRouter();
 
 const handleLogout = () => {
+  chatStore.reset();
   userStore.logout();
   router.push('/');
 };
+
+watch(
+  () => userStore.isLoggedIn,
+  (isLoggedIn) => {
+    if (isLoggedIn) {
+      chatStore.init();
+    } else {
+      chatStore.reset();
+    }
+  }
+);
+
+onMounted(() => {
+  if (userStore.isLoggedIn) {
+    chatStore.init();
+  }
+});
 </script>
 
 <style scoped>
@@ -62,6 +92,7 @@ const handleLogout = () => {
 .nav-link {
   color: var(--text-color);
   font-size: 0.875rem;
+  position: relative;
 }
 
 .nav-link:hover {
@@ -69,8 +100,40 @@ const handleLogout = () => {
   color: var(--primary-color);
 }
 
+.messages-icon-wrapper {
+  position: relative;
+  padding-right: 0.25rem;
+}
+
+.messages-icon {
+  font-size: 1.125rem;
+}
+
+.unread-badge {
+  position: absolute;
+  top: -0.5rem;
+  right: -0.5rem;
+  background-color: var(--danger-color, #ef4444);
+  color: white;
+  font-size: 0.625rem;
+  font-weight: 600;
+  padding: 0.125rem 0.375rem;
+  border-radius: 9999px;
+  min-width: 1.125rem;
+  text-align: center;
+  line-height: 1.25;
+}
+
 .main-content {
   min-height: calc(100vh - 64px);
   padding: 1.5rem 0;
+}
+
+.text-secondary {
+  color: var(--text-secondary);
+}
+
+.text-sm {
+  font-size: 0.875rem;
 }
 </style>

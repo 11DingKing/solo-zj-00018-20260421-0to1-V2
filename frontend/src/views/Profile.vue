@@ -1,17 +1,34 @@
 <template>
   <div class="profile-page container">
-    <div class="page-layout">
+    <div v-if="loadingProfile" class="loading">
+      <div class="spinner"></div>
+    </div>
+
+    <div v-else-if="error" class="alert alert-error">{{ error }}</div>
+
+    <div v-else class="page-layout">
       <aside class="sidebar">
         <div class="card">
           <div class="card-body text-center">
-            <div class="avatar-placeholder text-4xl mb-4">👤</div>
-            <h2 class="text-xl font-bold">{{ userStore.user?.username }}</h2>
+            <div class="avatar-placeholder text-4xl mb-4">
+              {{ profileUsername?.charAt(0)?.toUpperCase() || '?' }}
+            </div>
+            <h2 class="text-xl font-bold">{{ profileUsername }}</h2>
             <p class="text-secondary text-sm mt-2">
-              注册时间: {{ formatDateShort(userStore.user?.createdAt) }}
+              注册时间: {{ formatDateShort(profileCreatedAt) }}
             </p>
-            <p class="text-secondary text-sm mt-1" v-if="userStore.isAdmin">
+            <p class="text-secondary text-sm mt-1" v-if="profileIsAdmin">
               <span class="badge badge-warning">管理员</span>
             </p>
+
+            <div v-if="!isOwnProfile && userStore.isLoggedIn" class="mt-4">
+              <button
+                class="btn btn-primary w-full"
+                @click="handleSendMessage"
+              >
+                💬 发私信
+              </button>
+            </div>
           </div>
         </div>
       </aside>
@@ -25,9 +42,10 @@
                 :class="{ active: activeTab === 'posts' }"
                 @click="activeTab = 'posts'"
               >
-                我的帖子
+                {{ isOwnProfile ? '我的帖子' : 'Ta的帖子' }}
               </button>
               <button
+                v-if="isOwnProfile"
                 class="tab-btn"
                 :class="{ active: activeTab === 'replies' }"
                 @click="activeTab = 'replies'"
@@ -145,12 +163,15 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch, onMounted, onUnmounted } from "vue";
+import { ref, computed, watch, onMounted, onUnmounted } from "vue";
+import { useRoute, useRouter } from "vue-router";
 import { useUserStore } from "@/stores/user";
-import { postAPI, replyAPI } from "@/api";
+import { postAPI, replyAPI, userAPI } from "@/api";
 import { formatDate, formatDateShort } from "@/utils/date";
-import type { Post, Reply } from "@/types";
+import type { Post, Reply, User } from "@/types";
 
+const route = useRoute();
+const router = useRouter();
 const userStore = useUserStore();
 
 const activeTab = ref<"posts" | "replies">("posts");
@@ -158,6 +179,7 @@ const activeTab = ref<"posts" | "replies">("posts");
 const posts = ref<Post[]>([]);
 const replies = ref<Reply[]>([]);
 
+const loadingProfile = ref(false);
 const loadingPosts = ref(false);
 const loadingReplies = ref(false);
 
@@ -170,29 +192,90 @@ const nextCursorReplies = ref<string | null>(null);
 const loadMorePostsRef = ref<HTMLElement | null>(null);
 const loadMoreRepliesRef = ref<HTMLElement | null>(null);
 
+const error = ref("");
+
+const profileUser = ref<User | null>(null);
+
+const isOwnProfile = computed(() => {
+  const routeUserId = route.params.id as string | undefined;
+  if (!routeUserId) return true;
+  return userStore.user?.id === routeUserId;
+});
+
+const profileUsername = computed(() => {
+  if (isOwnProfile.value) {
+    return userStore.user?.username || "";
+  }
+  return profileUser.value?.username || "";
+});
+
+const profileCreatedAt = computed(() => {
+  if (isOwnProfile.value) {
+    return userStore.user?.createdAt || "";
+  }
+  return profileUser.value?.createdAt || "";
+});
+
+const profileIsAdmin = computed(() => {
+  if (isOwnProfile.value) {
+    return userStore.isAdmin;
+  }
+  return profileUser.value?.isAdmin || false;
+});
+
+const profileUserId = computed(() => {
+  if (isOwnProfile.value) {
+    return userStore.user?.id;
+  }
+  return route.params.id as string;
+});
+
 let postsObserver: IntersectionObserver | null = null;
 let repliesObserver: IntersectionObserver | null = null;
 
-const fetchMyPosts = async (reset = false) => {
+const fetchProfile = async () => {
+  if (isOwnProfile.value) return;
+
+  const userId = route.params.id as string;
+  if (!userId) return;
+
+  loadingProfile.value = true;
+  error.value = "";
+
+  try {
+    const response = await userAPI.getById(userId);
+    profileUser.value = response.data;
+  } catch (e: unknown) {
+    const err = e as { response?: { data?: { error?: string } } };
+    error.value = err.response?.data?.error || "用户不存在";
+  } finally {
+    loadingProfile.value = false;
+  }
+};
+
+const fetchPosts = async (reset = false) => {
   if (loadingPosts.value || (!hasMorePosts.value && !reset)) return;
 
   loadingPosts.value = true;
 
   try {
-    const response = await postAPI.getMy({
-      limit: 20,
-      before: reset ? undefined : nextCursorPosts.value || undefined,
-    });
+    if (isOwnProfile.value) {
+      const response = await postAPI.getMy({
+        limit: 20,
+        before: reset ? undefined : nextCursorPosts.value || undefined,
+      });
 
-    if (reset) {
-      posts.value = response.data.data;
+      if (reset) {
+        posts.value = response.data.data;
+      } else {
+        posts.value = [...posts.value, ...response.data.data];
+      }
+      hasMorePosts.value = response.data.hasMore;
+      nextCursorPosts.value = response.data.nextCursor;
     } else {
-      posts.value = [...posts.value, ...response.data.data];
     }
-    hasMorePosts.value = response.data.hasMore;
-    nextCursorPosts.value = response.data.nextCursor;
-  } catch (error) {
-    console.error("Failed to fetch my posts:", error);
+  } catch (e) {
+    console.error("Failed to fetch posts:", e);
   } finally {
     loadingPosts.value = false;
   }
@@ -223,16 +306,43 @@ const fetchMyReplies = async (reset = false) => {
   }
 };
 
+const handleSendMessage = () => {
+  if (!profileUserId.value) return;
+  router.push({
+    path: "/messages",
+    query: { userId: profileUserId.value },
+  });
+};
+
+watch(
+  () => route.params.id,
+  async () => {
+    if (!isOwnProfile.value) {
+      await fetchProfile();
+    }
+    posts.value = [];
+    hasMorePosts.value = true;
+    nextCursorPosts.value = null;
+    if (isOwnProfile.value || profileUser.value) {
+      fetchPosts(true);
+    }
+  }
+);
+
 watch(activeTab, (newTab) => {
   if (newTab === "posts" && posts.value.length === 0) {
-    fetchMyPosts(true);
-  } else if (newTab === "replies" && replies.value.length === 0) {
+    fetchPosts(true);
+  } else if (newTab === "replies" && isOwnProfile.value && replies.value.length === 0) {
     fetchMyReplies(true);
   }
 });
 
-onMounted(() => {
-  fetchMyPosts(true);
+onMounted(async () => {
+  if (!isOwnProfile.value) {
+    await fetchProfile();
+  }
+
+  fetchPosts(true);
 
   if (loadMorePostsRef.value) {
     postsObserver = new IntersectionObserver(
@@ -242,10 +352,10 @@ onMounted(() => {
           hasMorePosts.value &&
           !loadingPosts.value
         ) {
-          fetchMyPosts(false);
+          fetchPosts(false);
         }
       },
-      { threshold: 0.1 },
+      { threshold: 0.1 }
     );
     postsObserver.observe(loadMorePostsRef.value);
   }
@@ -261,7 +371,7 @@ onMounted(() => {
           fetchMyReplies(false);
         }
       },
-      { threshold: 0.1 },
+      { threshold: 0.1 }
     );
     repliesObserver.observe(loadMoreRepliesRef.value);
   }
@@ -295,8 +405,10 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   justify-content: center;
-  background-color: var(--bg-color);
+  background-color: var(--primary-color);
+  color: white;
   border-radius: 50%;
+  font-weight: 600;
 }
 
 .tabs {
@@ -355,6 +467,28 @@ onUnmounted(() => {
   height: 20px;
 }
 
+.loading {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 2rem;
+}
+
+.spinner {
+  width: 24px;
+  height: 24px;
+  border: 2px solid var(--border-color);
+  border-top-color: var(--primary-color);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 .py-4 {
   padding-top: 1rem;
   padding-bottom: 1rem;
@@ -364,12 +498,28 @@ onUnmounted(() => {
   margin-bottom: 0.5rem;
 }
 
+.mt-1 {
+  margin-top: 0.25rem;
+}
+
 .mt-2 {
   margin-top: 0.5rem;
 }
 
 .mt-4 {
   margin-top: 1rem;
+}
+
+.w-full {
+  width: 100%;
+}
+
+.alert-error {
+  padding: 1rem;
+  background-color: #fee2e2;
+  color: #dc2626;
+  border-radius: 0.375rem;
+  text-align: center;
 }
 
 @media (max-width: 768px) {

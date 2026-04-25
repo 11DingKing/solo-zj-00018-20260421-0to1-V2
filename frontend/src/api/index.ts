@@ -1,5 +1,5 @@
 import axios from 'axios';
-import type { User, Category, Post, Reply, PaginatedResponse } from '@/types';
+import type { User, Category, Post, Reply, Message, Conversation, PaginatedResponse } from '@/types';
 
 const api = axios.create({
   baseURL: '/api',
@@ -106,6 +106,28 @@ export const replyAPI = {
   
   like: (id: string) =>
     api.post<{ liked: boolean; likeCount: number }>(`/replies/${id}/like`),
+};
+
+export const messageAPI = {
+  send: (data: { receiverId: string; content: string }) =>
+    api.post<Message>('/messages', data),
+  
+  getConversation: (userId: string, params?: { limit?: number; before?: string }) =>
+    api.get<PaginatedResponse<Message>>(`/messages/conversation/${userId}`, { params }),
+  
+  getConversations: () =>
+    api.get<{ data: Conversation[] }>('/messages/conversations'),
+  
+  markAsRead: (userId: string) =>
+    api.put<{ success: boolean; modifiedCount: number }>(`/messages/conversation/${userId}/read`),
+  
+  getUnreadCount: () =>
+    api.get<{ unreadCount: number }>('/messages/unread-count'),
+};
+
+export const userAPI = {
+  getById: (id: string) =>
+    api.get<User>(`/users/${id}`),
 };
 
 export default api;

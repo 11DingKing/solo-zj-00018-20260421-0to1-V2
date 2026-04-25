@@ -52,6 +52,32 @@ export interface Reply {
   children?: Reply[];
 }
 
+export interface Message {
+  _id: string;
+  senderId: string;
+  receiverId: string;
+  sender?: Author;
+  receiver?: Author;
+  content: string;
+  isRead: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface Conversation {
+  otherUser: Author | null;
+  lastMessage: {
+    _id: string;
+    content: string;
+    senderId: string;
+    receiverId: string;
+    isRead: boolean;
+    createdAt: string;
+    isSentByMe: boolean;
+  };
+  unreadCount: number;
+}
+
 export interface PaginatedResponse<T> {
   data: T[];
   hasMore: boolean;
