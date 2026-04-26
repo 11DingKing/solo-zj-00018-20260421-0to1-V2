@@ -186,7 +186,7 @@ export const useChatStore = defineStore('chat', () => {
     );
     
     const newConversation: Conversation = {
-      otherUser: isSentByMe ? message.receiver : message.sender || null,
+      otherUser: isSentByMe ? (message.receiver ?? null) : (message.sender ?? null),
       lastMessage: {
         _id: message._id,
         content: message.content,

@@ -56,8 +56,8 @@ export interface Message {
   _id: string;
   senderId: string;
   receiverId: string;
-  sender?: Author;
-  receiver?: Author;
+  sender: Author | null;
+  receiver: Author | null;
   content: string;
   isRead: boolean;
   createdAt: string;
